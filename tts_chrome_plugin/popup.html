@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 320px; padding: 12px; font-family: Arial, sans-serif; }
+    button { width: 100%; padding: 10px; margin: 6px 0; background: #4A90E2; color: white; border: none; border-radius: 4px; }
+    button:hover { background: #357ABD; }
+    select, button { font-size: 14px; }
+    #status { margin-top: 10px; font-size: 13px; color: #555; min-height: 1.4em; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <select id="voice">
+    <option value="am_adam">Adam (Male)</option>
+    <option value="bf_emma">Emma (Female)</option>
+    <option value="af_alloy">Alloy (Female)</option>
+    <option value="bm_george">George (Male)</option>
+    <option value="am_eric">Eric (Male)</option>
+    <option value="bf_lily">Lily (Female)</option>
+	<option value="af_bella">Bella (Female)</option>
+  </select>
+
+  <button id="readSelection">Read Selected Text</button>
+  <button id="readPage">Read Entire Page</button>
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

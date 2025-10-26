@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Kokoro TTS Reader",
+  "version": "1.2",
+  "description": "Reads webpage text using Kokoro TTS",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["http://localhost:5000/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"]
+  }]
+}
