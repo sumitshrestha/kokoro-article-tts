@@ -42,21 +42,28 @@ function extractText(action) {
   const clone = container.cloneNode(true);
 
   // Convert <br><br> to paragraph markers
-  const brs = clone.querySelectorAll('br');
+  const brs = Array.from(clone.querySelectorAll('br'));
   let i = 0;
   while (i < brs.length - 1) {
     const current = brs[i];
     const next = brs[i + 1];
-    if (next && next === current.nextSibling) {
+
+    // Check if next BR exists and is immediately adjacent
+    if (next && next.previousSibling === current) {
       // Found <br><br>
       const marker = document.createTextNode('||PARA||');
-      clone.insertBefore(marker, current);
+      current.parentNode.insertBefore(marker, current);
       // Remove both <br> tags
-      clone.removeChild(current);
-      clone.removeChild(next);
-      // Re-query brs since DOM changed
-      const newBrs = clone.querySelectorAll('br');
-      i = Array.from(newBrs).indexOf(marker.nextSibling?.nextElementSibling) || 0;
+      current.parentNode.removeChild(current);
+      next.parentNode.removeChild(next);
+
+      // Rebuild the array after DOM changes
+      const updatedBrs = Array.from(clone.querySelectorAll('br'));
+      // Continue from where we left off
+      i = Math.max(0, updatedBrs.indexOf(current) - 1);
+      // Update the brs array reference
+      brs.length = 0;
+      brs.push(...updatedBrs);
     } else {
       i++;
     }

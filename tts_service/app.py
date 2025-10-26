@@ -41,8 +41,12 @@ def get_model():
         _last_used = now
         if _model is None:
             print("🧠 Loading Kokoro TTS model...")
-            _model = Kokoro(MODEL_PATH, VOICES_PATH)
-            print("✅ Kokoro TTS loaded!")
+            try:
+                _model = Kokoro(MODEL_PATH, VOICES_PATH)
+                print("✅ Kokoro TTS loaded!")
+            except Exception as e:
+                print(f"❌ Failed to load model: {str(e)}")
+                raise Exception(f"Failed to load TTS model: {str(e)}")
         return _model
 
 
@@ -51,10 +55,20 @@ def unload_model_if_idle():
     while True:
         time.sleep(IDLE_TIMEOUT)
         with _lock:
-            if _model is not None and _active_requests == 0 and (time.time() - _last_used) > IDLE_TIMEOUT:
+            # Check both active requests and if model exists
+            if (
+                _model is not None
+                and _active_requests == 0
+                and (time.time() - _last_used) > IDLE_TIMEOUT
+            ):
                 print("💤 Unloading Kokoro TTS model due to inactivity...")
-                _model = None
-                print("📉 Model unloaded. Memory freed.")
+                try:
+                    del _model
+                    _model = None
+                    print("📉 Model unloaded. Memory freed.")
+                except Exception as e:
+                    print(f"⚠️ Error unloading model: {str(e)}")
+                    _model = None
 
 
 threading.Thread(target=unload_model_if_idle, daemon=True).start()
@@ -62,8 +76,8 @@ threading.Thread(target=unload_model_if_idle, daemon=True).start()
 
 def split_into_paragraphs(text: str) -> list:
     """Split by double newlines or excessive spacing."""
-    text = re.sub(r'\r\n|\r', '\n', text)
-    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    text = re.sub(r"\r\n|\r", "\n", text)
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     return paragraphs if paragraphs else [text.strip()]
 
 
@@ -87,7 +101,7 @@ def synthesis_worker(kokoro, paragraphs, voice, speed, lang, audio_queue):
         audio_queue.put(None)
     except Exception as e:
         print(f"❌ Synthesis error: {str(e)}")
-        audio_queue.put(('error', str(e)))
+        audio_queue.put(("error", str(e)))
 
 
 def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
@@ -104,7 +118,7 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
     synthesis_thread = threading.Thread(
         target=synthesis_worker,
         args=(kokoro, paragraphs, voice, speed, lang, audio_queue),
-        daemon=True
+        daemon=True,
     )
     synthesis_thread.start()
 
@@ -117,7 +131,7 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
             # Synthesis complete
             break
 
-        if isinstance(item, tuple) and item[0] == 'error':
+        if isinstance(item, tuple) and item[0] == "error":
             raise Exception(item[1])
 
         i, samples, sr = item
@@ -143,15 +157,18 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
 
 
 app = Flask(__name__)
-CORS(app, origins=[
-    "https://mahabharata-online.github.io",
-    "http://localhost:5000",
-    "https://*.github.io",
-    "https://example.com"
-])
+CORS(
+    app,
+    origins=[
+        "https://mahabharata-online.github.io",
+        "http://localhost:5000",
+        "https://*.github.io",
+        "https://example.com",
+    ],
+)
 
 
-@app.route('/health', methods=['GET'])
+@app.route("/health", methods=["GET"])
 def health_check():
     with _lock:
         model_loaded = _model is not None
@@ -161,41 +178,65 @@ def health_check():
             status = "degraded: model files missing"
         elif not model_loaded:
             status = "healthy (model unloaded - idle)"
-    return jsonify({
-        "status": status,
-        "uptime_seconds": round(uptime, 2),
-        "model_loaded": model_loaded,
-        "model_file": MODEL_PATH,
-        "voices_file": VOICES_PATH,
-        "idle_timeout_seconds": IDLE_TIMEOUT
-    })
+    return jsonify(
+        {
+            "status": status,
+            "uptime_seconds": round(uptime, 2),
+            "model_loaded": model_loaded,
+            "model_file": MODEL_PATH,
+            "voices_file": VOICES_PATH,
+            "idle_timeout_seconds": IDLE_TIMEOUT,
+        }
+    )
 
 
-@app.route('/tts', methods=['POST'])
+@app.route("/tts", methods=["POST"])
 def tts_endpoint():
     global _active_requests
-    try:
-        with _lock:
-            _active_requests += 1
 
+    # Increment active request count FIRST (before any potential failures)
+    with _lock:
+        _active_requests += 1
+
+    try:
         start_time = time.time()
         data = request.get_json()
-        raw_text = data.get('text', '').strip()
-        voice = data.get('voice', DEFAULT_VOICE)
-        speed = float(data.get('speed', DEFAULT_SPEED))
-        lang = data.get('lang', DEFAULT_LANG)
+        raw_text = data.get("text", "").strip()
+        voice = data.get("voice", DEFAULT_VOICE)
+        speed = float(data.get("speed", DEFAULT_SPEED))
+        lang = data.get("lang", DEFAULT_LANG)
         print(f"Received text: {raw_text[:100]}...")
 
         if not raw_text:
-            return jsonify({'error': 'No text provided'}), 400
+            return jsonify({"error": "No text provided"}), 400
 
         valid_voices = {
-            "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore", "af_nicole",
-            "af_nova", "af_river", "af_sarah", "af_sky",
-            "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam", "am_michael",
-            "am_onyx", "am_puck",
-            "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
-            "bm_daniel", "bm_fable", "bm_george", "bm_lewis"
+            "af_alloy",
+            "af_aoede",
+            "af_bella",
+            "af_jessica",
+            "af_kore",
+            "af_nicole",
+            "af_nova",
+            "af_river",
+            "af_sarah",
+            "af_sky",
+            "am_adam",
+            "am_echo",
+            "am_eric",
+            "am_fenrir",
+            "am_liam",
+            "am_michael",
+            "am_onyx",
+            "am_puck",
+            "bf_alice",
+            "bf_emma",
+            "bf_isabella",
+            "bf_lily",
+            "bm_daniel",
+            "bm_fable",
+            "bm_george",
+            "bm_lewis",
         }
         if voice not in valid_voices:
             voice = DEFAULT_VOICE
@@ -203,13 +244,24 @@ def tts_endpoint():
         paragraphs = split_into_paragraphs(raw_text)
         print(f"📄 Processing {len(paragraphs)} paragraph(s) with prefetch")
 
-        kokoro = get_model()
+        # Get model (will reload if necessary)
+        try:
+            kokoro = get_model()
+        except Exception as e:
+            print(f"❌ Failed to get model: {str(e)}")
+            return jsonify({"error": f"Failed to load TTS model: {str(e)}"}), 500
 
         # Process with prefetching (synthesis runs ahead of playback)
-        full_audio_chunks, sample_rate = play_with_prefetch(paragraphs, voice, speed, lang, kokoro)
+        full_audio_chunks, sample_rate = play_with_prefetch(
+            paragraphs, voice, speed, lang, kokoro
+        )
 
         # Save immediately after synthesis completes (before playback finishes)
-        final_audio = np.concatenate(full_audio_chunks) if len(full_audio_chunks) > 1 else full_audio_chunks[0]
+        final_audio = (
+            np.concatenate(full_audio_chunks)
+            if len(full_audio_chunks) > 1
+            else full_audio_chunks[0]
+        )
         filename = f"tts_{voice}_{uuid.uuid4().hex[:8]}.wav"
         filepath = os.path.join(SAVE_FOLDER, filename)
         sf.write(filepath, final_audio, sample_rate)
@@ -217,25 +269,30 @@ def tts_endpoint():
         total_time = time.time() - start_time
         print(f"✅ Full audio saved as {filename} ({total_time:.2f}s)")
 
-        return jsonify({
-            'success': True,
-            'saved_as': filename,
-            'voice': voice,
-            'paragraphs': len(paragraphs),
-            'duration_sec': len(final_audio) / sample_rate
-        })
+        return jsonify(
+            {
+                "success": True,
+                "saved_as": filename,
+                "voice": voice,
+                "paragraphs": len(paragraphs),
+                "duration_sec": len(final_audio) / sample_rate,
+            }
+        )
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
     finally:
         with _lock:
             _active_requests -= 1
             _last_used = time.time()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(f"🚀 Kokoro TTS server (parallel prefetch playback)")
     print(f"📁 Audio saved to: {os.path.abspath(SAVE_FOLDER)}")
     print(f"🧪 Health check: http://localhost:5000/health")
-    app.run(host='localhost', port=5000, debug=False, threaded=True)
+    app.run(host="localhost", port=5000, debug=False, threaded=True)
