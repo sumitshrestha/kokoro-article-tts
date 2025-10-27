@@ -150,6 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const speedValue = document.getElementById('speedValue');
   const readSelectionBtn = document.getElementById('readSelection');
   const readPageBtn = document.getElementById('readPage');
+  const stopBtn = document.getElementById('stopReading');
+
+  // Initially disable stop button
+  stopBtn.disabled = true;
 
   // Load saved preferences
   Settings.get(['language', 'voice', 'speed'], (result) => {
@@ -251,9 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
     status.textContent = "🔄 Processing text...";
     status.className = "processing";
 
-    // Disable buttons during processing
+    // Disable read buttons, enable stop button during processing
     readSelectionBtn.disabled = true;
     readPageBtn.disabled = true;
+    stopBtn.disabled = false;
 
     const params = {
       action,
@@ -268,13 +273,15 @@ document.addEventListener('DOMContentLoaded', () => {
         status.className = "error";
         readSelectionBtn.disabled = false;
         readPageBtn.disabled = false;
+        stopBtn.disabled = true;
         return;
       }
 
       chrome.tabs.sendMessage(tabs[0].id, params, (response) => {
-        // Re-enable buttons
+        // Re-enable read buttons, disable stop button
         readSelectionBtn.disabled = false;
         readPageBtn.disabled = false;
+        stopBtn.disabled = true;
 
         if (chrome.runtime.lastError) {
           status.textContent = "❌ " + chrome.runtime.lastError.message;
@@ -301,5 +308,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   readPageBtn.addEventListener('click', () => {
     sendMessage('readPage');
+  });
+
+  stopBtn.addEventListener('click', () => {
+    console.log('🛑 Stop button clicked');
+    status.textContent = "🛑 Stopping playback...";
+    status.className = "processing";
+
+    chrome.runtime.sendMessage({ type: 'TTS_STOP' }, (response) => {
+      console.log('Stop response received:', response);
+
+      stopBtn.disabled = true;
+      readSelectionBtn.disabled = false;
+      readPageBtn.disabled = false;
+
+      if (chrome.runtime.lastError) {
+        console.error('Stop error:', chrome.runtime.lastError);
+        status.textContent = "❌ Error: " + chrome.runtime.lastError.message;
+        status.className = "error";
+        return;
+      }
+
+      if (response?.success) {
+        status.textContent = "⏹️ Playback stopped";
+        status.className = "success";
+      } else {
+        status.textContent = response?.message || "⚠️ No active playback";
+        status.className = "error";
+      }
+    });
   });
 });

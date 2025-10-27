@@ -31,7 +31,8 @@ _last_used = 0
 _start_time = time.time()
 _lock = threading.Lock()
 _active_requests = 0
-_synthesis_lock = threading.Lock()  # NEW: Separate lock for synthesis
+_synthesis_lock = threading.Lock()
+_stop_flags = {}  # Track stop requests by session_id
 
 
 def get_model():
@@ -55,7 +56,6 @@ def unload_model_if_idle():
     while True:
         time.sleep(IDLE_TIMEOUT)
         with _lock:
-            # Check both active requests and if model exists
             if (
                 _model is not None
                 and _active_requests == 0
@@ -81,13 +81,19 @@ def split_into_paragraphs(text: str) -> list:
     return paragraphs if paragraphs else [text.strip()]
 
 
-def synthesis_worker(kokoro, paragraphs, voice, speed, lang, audio_queue):
+def synthesis_worker(kokoro, paragraphs, voice, speed, lang, audio_queue, session_id):
     """
     Worker thread that synthesizes paragraphs sequentially and puts them in queue.
     Synthesis must be sequential due to model limitations.
     """
     try:
         for i, para in enumerate(paragraphs):
+            # Check if stop requested
+            if _stop_flags.get(session_id, False):
+                print(f"  🛑 Synthesis stopped for session {session_id}")
+                audio_queue.put(None)
+                return
+
             print(f"  → Synthesizing paragraph {i + 1}/{len(paragraphs)}")
 
             # Lock synthesis to prevent concurrent access to model
@@ -104,7 +110,7 @@ def synthesis_worker(kokoro, paragraphs, voice, speed, lang, audio_queue):
         audio_queue.put(("error", str(e)))
 
 
-def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
+def play_with_prefetch(paragraphs, voice, speed, lang, kokoro, session_id):
     """
     Synthesize and play paragraphs with prefetching.
     Synthesis happens in background thread, playback waits for queue.
@@ -117,7 +123,7 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
     # Start synthesis thread
     synthesis_thread = threading.Thread(
         target=synthesis_worker,
-        args=(kokoro, paragraphs, voice, speed, lang, audio_queue),
+        args=(kokoro, paragraphs, voice, speed, lang, audio_queue, session_id),
         daemon=True,
     )
     synthesis_thread.start()
@@ -125,6 +131,12 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
     # Play paragraphs as they become ready
     paragraph_count = 0
     while paragraph_count < len(paragraphs):
+        # Check if stop requested
+        if _stop_flags.get(session_id, False):
+            print(f"  🛑 Playback stopped for session {session_id}")
+            sd.stop()
+            break
+
         item = audio_queue.get()
 
         if item is None:
@@ -142,6 +154,11 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
         all_chunks.append(samples)
         paragraph_count += 1
 
+        # Check stop flag before playing
+        if _stop_flags.get(session_id, False):
+            print(f"  🛑 Playback stopped before paragraph {i + 1}")
+            break
+
         # Play current paragraph
         print(f"  ▶️  Playing paragraph {i + 1}/{len(paragraphs)}")
         sd.play(samples, sr)
@@ -149,9 +166,18 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
         # ALWAYS wait for current paragraph to finish before playing next
         # This ensures sequential playback order
         sd.wait()
+
+        # Check stop flag after playing
+        if _stop_flags.get(session_id, False):
+            print(f"  🛑 Playback stopped after paragraph {i + 1}")
+            break
+
         print(f"  ✓ Finished playing paragraph {i + 1}/{len(paragraphs)}")
 
     synthesis_thread.join(timeout=5)
+
+    # Clean up stop flag
+    _stop_flags.pop(session_id, None)
 
     return all_chunks, sample_rate
 
@@ -159,12 +185,13 @@ def play_with_prefetch(paragraphs, voice, speed, lang, kokoro):
 app = Flask(__name__)
 CORS(
     app,
-    origins=[
-        "https://mahabharata-online.github.io",
-        "http://localhost:5000",
-        "https://*.github.io",
-        "https://example.com",
-    ],
+    resources={
+        r"/*": {
+            "origins": "*",  # Allow all origins for local development
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type"],
+        }
+    },
 )
 
 
@@ -205,8 +232,12 @@ def tts_endpoint():
         voice = data.get("voice", DEFAULT_VOICE)
         speed = float(data.get("speed", DEFAULT_SPEED))
         lang = data.get("lang", DEFAULT_LANG)
+        session_id = data.get(
+            "session_id", str(uuid.uuid4())
+        )  # Get or create session ID
 
         print(f"📥 TTS Request received:")
+        print(f"   Session ID: {session_id}")
         print(f"   Text length: {len(raw_text)} characters")
         print(f"   Language: {lang}")
         print(f"   Voice: {voice}")
@@ -295,33 +326,50 @@ def tts_endpoint():
             print(f"❌ Failed to get model: {str(e)}")
             return jsonify({"error": f"Failed to load TTS model: {str(e)}"}), 500
 
+        # Initialize stop flag for this session
+        _stop_flags[session_id] = False
+
         # Process with prefetching (synthesis runs ahead of playback)
         full_audio_chunks, sample_rate = play_with_prefetch(
-            paragraphs, voice, speed, lang, kokoro
+            paragraphs, voice, speed, lang, kokoro, session_id
         )
 
         # Save immediately after synthesis completes (before playback finishes)
-        final_audio = (
-            np.concatenate(full_audio_chunks)
-            if len(full_audio_chunks) > 1
-            else full_audio_chunks[0]
-        )
-        filename = f"tts_{voice}_{uuid.uuid4().hex[:8]}.wav"
-        filepath = os.path.join(SAVE_FOLDER, filename)
-        sf.write(filepath, final_audio, sample_rate)
+        if full_audio_chunks:
+            final_audio = (
+                np.concatenate(full_audio_chunks)
+                if len(full_audio_chunks) > 1
+                else full_audio_chunks[0]
+            )
+            filename = f"tts_{voice}_{uuid.uuid4().hex[:8]}.wav"
+            filepath = os.path.join(SAVE_FOLDER, filename)
+            sf.write(filepath, final_audio, sample_rate)
 
-        total_time = time.time() - start_time
-        print(f"✅ Full audio saved as {filename} ({total_time:.2f}s)")
+            total_time = time.time() - start_time
+            print(f"✅ Full audio saved as {filename} ({total_time:.2f}s)")
 
-        return jsonify(
-            {
-                "success": True,
-                "saved_as": filename,
-                "voice": voice,
-                "paragraphs": len(paragraphs),
-                "duration_sec": len(final_audio) / sample_rate,
-            }
-        )
+            return jsonify(
+                {
+                    "success": True,
+                    "saved_as": filename,
+                    "voice": voice,
+                    "paragraphs": len(paragraphs),
+                    "duration_sec": len(final_audio) / sample_rate,
+                    "session_id": session_id,
+                }
+            )
+        else:
+            # Request was stopped before any audio was generated
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Playback stopped",
+                        "session_id": session_id,
+                    }
+                ),
+                200,
+            )
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
@@ -333,6 +381,40 @@ def tts_endpoint():
         with _lock:
             _active_requests -= 1
             _last_used = time.time()
+
+
+@app.route("/stop", methods=["POST"])
+def stop_endpoint():
+    """Stop ongoing TTS playback for a session"""
+    print("🛑 Stop request received")
+    try:
+        data = request.get_json()
+        session_id = data.get("session_id")
+
+        if not session_id:
+            return jsonify({"error": "No session_id provided"}), 400
+
+        if session_id in _stop_flags:
+            _stop_flags[session_id] = True
+            sd.stop()  # Stop any active audio playback
+            print(f"🛑 Stop request received for session {session_id}")
+            return jsonify(
+                {"success": True, "message": f"Stopped session {session_id}"}
+            )
+        else:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": f"No active session found: {session_id}",
+                    }
+                ),
+                404,
+            )
+
+    except Exception as e:
+        print(f"❌ Stop error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
