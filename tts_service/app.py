@@ -205,12 +205,21 @@ def tts_endpoint():
         voice = data.get("voice", DEFAULT_VOICE)
         speed = float(data.get("speed", DEFAULT_SPEED))
         lang = data.get("lang", DEFAULT_LANG)
+
+        print(f"📥 TTS Request received:")
+        print(f"   Text length: {len(raw_text)} characters")
+        print(f"   Language: {lang}")
+        print(f"   Voice: {voice}")
+        print(f"   Speed: {speed}")
+
         print(f"Received text: {raw_text[:100]}...")
 
         if not raw_text:
             return jsonify({"error": "No text provided"}), 400
 
         valid_voices = {
+            # American English
+            "af_heart",
             "af_alloy",
             "af_aoede",
             "af_bella",
@@ -229,6 +238,8 @@ def tts_endpoint():
             "am_michael",
             "am_onyx",
             "am_puck",
+            "am_santa",
+            # British English
             "bf_alice",
             "bf_emma",
             "bf_isabella",
@@ -237,6 +248,39 @@ def tts_endpoint():
             "bm_fable",
             "bm_george",
             "bm_lewis",
+            # Japanese
+            "jf_alpha",
+            "jf_gongitsune",
+            "jf_nezumi",
+            "jf_tebukuro",
+            "jm_kumo",
+            # Mandarin Chinese
+            "zf_xiaobei",
+            "zf_xiaoni",
+            "zf_xiaoxiao",
+            "zf_xiaoyi",
+            "zm_yunjian",
+            "zm_yunxi",
+            "zm_yunxia",
+            "zm_yunyang",
+            # Spanish
+            "ef_dora",
+            "em_alex",
+            "em_santa",
+            # French
+            "ff_siwis",
+            # Hindi
+            "hf_alpha",
+            "hf_beta",
+            "hm_omega",
+            "hm_psi",
+            # Italian
+            "if_sara",
+            "im_nicola",
+            # Brazilian Portuguese
+            "pf_dora",
+            "pm_alex",
+            "pm_santa",
         }
         if voice not in valid_voices:
             voice = DEFAULT_VOICE

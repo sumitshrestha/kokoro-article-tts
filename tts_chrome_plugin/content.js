@@ -83,14 +83,26 @@ function extractText(action) {
 }
 
 // Send to TTS service
-async function sendToTTS(text, voice) {
+async function sendToTTS(text, params) {
   if (!text) return { error: 'No text to read' };
+
+  console.log('📤 Content script sending TTS request:', {
+    textLength: text.length,
+    voice: params.voice,
+    speed: params.speed,
+    lang: params.lang
+  });
 
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(
       {
         type: 'TTS_REQUEST',
-        payload: { text, voice }
+        payload: {
+          text,
+          voice: params.voice || 'af_bella',
+          speed: params.speed || 1.0,
+          lang: params.lang || 'en-us'
+        }
       },
       (response) => {
         if (response?.success) {
@@ -105,9 +117,21 @@ async function sendToTTS(text, voice) {
 
 // Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('📨 Content script received message:', request);
+
   if (request.action === 'readSelection' || request.action === 'readPage') {
     const text = extractText(request.action);
-    sendToTTS(text, request.voice).then(sendResponse);
+
+    // Pass all parameters to sendToTTS
+    const params = {
+      voice: request.voice || 'af_bella',
+      speed: request.speed || 1.0,
+      lang: request.lang || 'en-us'
+    };
+
+    console.log('📋 Extracted params:', params);
+
+    sendToTTS(text, params).then(sendResponse);
   }
   return true; // Required for async response
 });

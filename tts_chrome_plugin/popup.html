@@ -4,9 +4,79 @@
 <head>
   <style>
     body {
-      width: 320px;
-      padding: 12px;
+      width: 360px;
+      padding: 14px;
       font-family: Arial, sans-serif;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .header h3 {
+      margin: 0 0 4px 0;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .service-status {
+      font-size: 11px;
+      color: #666;
+      margin: 0;
+    }
+
+    .service-status.online {
+      color: #28a745;
+    }
+
+    .service-status.offline {
+      color: #dc3545;
+    }
+
+    .settings-section {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    select,
+    input[type="range"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      background: white;
+    }
+
+    input[type="range"] {
+      padding: 0;
+      margin-top: 4px;
+    }
+
+    .speed-display {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .speed-value {
+      font-size: 13px;
+      color: #4A90E2;
+      font-weight: 600;
+      min-width: 40px;
+      text-align: right;
     }
 
     button {
@@ -17,47 +87,93 @@
       color: white;
       border: none;
       border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
     }
 
     button:hover {
       background: #357ABD;
     }
 
-    select,
-    button {
-      font-size: 14px;
+    button:active {
+      background: #2868a8;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
     }
 
     #status {
-      margin-top: 10px;
-      font-size: 13px;
+      margin-top: 12px;
+      padding: 8px;
+      font-size: 12px;
       color: #555;
       min-height: 1.4em;
+      border-radius: 4px;
+      text-align: center;
     }
 
     .success {
-      color: green;
+      color: #28a745;
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
     }
 
     .error {
-      color: red;
+      color: #dc3545;
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+    }
+
+    .processing {
+      color: #856404;
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
     }
   </style>
 </head>
 
 <body>
-  <select id="voice">
-    <option value="af_bella">Bella (Female)</option>
-    <option value="am_adam">Adam (Male)</option>
-    <option value="bf_emma">Emma (Female)</option>
-    <option value="af_alloy">Alloy (Female)</option>
-    <option value="bm_george">George (Male)</option>
-    <option value="am_eric">Eric (Male)</option>
-    <option value="bf_lily">Lily (Female)</option>
-  </select>
+  <div class="header">
+    <h3>🎤 Kokoro TTS Reader</h3>
+    <p class="service-status" id="serviceStatus">Checking service...</p>
+  </div>
 
-  <button id="readSelection">Read Selected Text</button>
-  <button id="readPage">Read Entire Page</button>
+  <div class="settings-section">
+    <label for="language">Language:</label>
+    <select id="language">
+      <option value="en-us">English (American)</option>
+      <option value="en-gb">English (British)</option>
+      <option value="ja">Japanese</option>
+      <option value="cmn">Chinese (Mandarin)</option>
+      <option value="es">Spanish</option>
+      <option value="fr-fr">French</option>
+      <option value="hi">Hindi</option>
+      <option value="it">Italian</option>
+      <option value="pt-br">Portuguese (Brazilian)</option>
+    </select>
+  </div>
+
+  <div class="settings-section">
+    <label for="voice">Voice:</label>
+    <select id="voice">
+      <!-- Dynamically populated based on language -->
+    </select>
+  </div>
+
+  <div class="settings-section">
+    <div class="speed-display">
+      <label for="speed" style="margin-bottom: 0;">Speed:</label>
+      <span class="speed-value" id="speedValue">1.0x</span>
+    </div>
+    <input type="range" id="speed" min="0.5" max="2.0" step="0.1" value="1.0">
+  </div>
+
+  <button id="readSelection">📖 Read Selected Text</button>
+  <button id="readPage">📄 Read Entire Page</button>
+
   <div id="status"></div>
 
   <script src="popup.js"></script>

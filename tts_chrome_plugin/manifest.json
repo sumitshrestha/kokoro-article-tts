@@ -1,18 +1,41 @@
 {
   "manifest_version": 3,
   "name": "Kokoro TTS Reader",
-  "version": "1.2",
-  "description": "Reads webpage text using Kokoro TTS",
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["http://localhost:5000/*"],
+  "version": "1.0.0",
+  "description": "Read selected text or entire pages using Kokoro TTS",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content.js"]
-  }]
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
 }
